@@ -34,7 +34,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
-    displayStatus,
+    // displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { MatchResult, PromptEntity } from "agent-cache";
@@ -317,14 +317,14 @@ async function executeAction(
     );
     let returnedResult: ActionResult | undefined;
     try {
-        const prefix = getSchemaNamePrefix(
-            action.translatorName,
-            systemContext,
-        );
-        displayStatus(
-            `${prefix}Executing action ${getFullActionName(executableAction)}`,
-            context,
-        );
+        // const prefix = getSchemaNamePrefix(
+        //     action.translatorName,
+        //     systemContext,
+        // );
+        // displayStatus(
+        //     `${prefix}Executing action ${getFullActionName(executableAction)}`,
+        //     context,
+        // );
         returnedResult = await appAgent.executeAction(action, actionContext);
     } finally {
         actionContext.profiler?.stop();
