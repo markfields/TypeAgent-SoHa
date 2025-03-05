@@ -65,14 +65,11 @@ function metricsString(name: string, duration: number, count = 1) {
 }
 
 function updateMetricsVisibility(visible: boolean, div: HTMLDivElement) {
-    const addClass = visible
-        ? "chat-message-body"
-        : "chat-message-body-hide-metrics";
-    const removeClass = visible
-        ? "chat-message-body-hide-metrics"
-        : "chat-message-body";
-    div.classList.remove(removeClass);
-    div.classList.add(addClass);
+    if (!visible) {
+        div.style.display = "none"; // Hide the div
+    } else {
+        div.style.display = "block"; // Show it if needed
+    }
 }
 
 export class MessageContainer {
@@ -540,15 +537,15 @@ export class MessageContainer {
     }
 
     private updateFirstResponseMetrics() {
-        if (this.showFirstResponseMetrics) {
+        if (this.showFirstResponseMetrics === true) {
             const messages: string[] = [];
             if (this.messageStart !== undefined) {
-                messages.push(
-                    metricsString(
-                        "First Message",
-                        this.messageStart - this.requestStart,
-                    ),
-                );
+                // messages.push(
+                //     metricsString(
+                //         "First Message",
+                //         this.messageStart - this.requestStart,
+                //     ),
+                // );
             }
             if (this.audioStart !== undefined) {
                 messages.push(
@@ -566,7 +563,8 @@ export class MessageContainer {
     }
 
     public setFirstResponseMetricsVisibility(visible: boolean) {
-        this.showFirstResponseMetrics = visible;
+        console.log(visible)
+        this.showFirstResponseMetrics = false;
         this.updateFirstResponseMetrics();
     }
 
@@ -603,7 +601,7 @@ export class MessageContainer {
 
     public setMetricsVisible(visible: boolean) {
         this.hideMetrics = !visible;
-        updateMetricsVisibility(visible, this.messageBodyDiv);
+        updateMetricsVisibility(false, this.messageBodyDiv);
     }
 
     public notifyExplained(data: NotifyExplainedData) {

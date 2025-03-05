@@ -313,9 +313,10 @@ function endProcessCommand(
     context.commandProfiler?.stop();
     context.commandProfiler = undefined;
 
-    const metrics = requestId
-        ? context.metricsManager?.endCommand(requestId)
-        : undefined;
+    const metrics = undefined;
+    // requestId
+    //     ? context.metricsManager?.endCommand(requestId)
+    //     : undefined;
 
     if (metrics) {
         ensureCommandResult(context).metrics = metrics;

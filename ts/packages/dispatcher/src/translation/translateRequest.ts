@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 import {
     displayError,
-    displayStatus,
+    // displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
@@ -36,7 +36,7 @@ import {
 } from "../context/dispatcher/dispatcherUtils.js";
 import { loadAssistantSelectionJsonTranslator } from "./unknownSwitcher.js";
 import {
-    getSchemaNamePrefix,
+    // getSchemaNamePrefix,
     startStreamPartialAction,
 } from "../execute/actionHandlers.js";
 import { ProfileNames } from "../utils/profileNames.js";
@@ -260,8 +260,8 @@ async function translateRequestWithSchema(
 ): Promise<TranslateStepResult | undefined> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
-    const prefix = getSchemaNamePrefix(schemaName, systemContext);
-    displayStatus(`${prefix}Translating '${request}'`, context);
+    // const prefix = getSchemaNamePrefix(schemaName, systemContext);
+    // displayStatus(`${prefix}Translating '${request}'`, context);
 
     const optimize = config.translation.schema.optimize;
     if (
@@ -354,14 +354,14 @@ async function translateWithTranslator(
                           // don't stream if action not part of the translator or not active for the schema
                           return;
                       }
-                      const prefix = getSchemaNamePrefix(
-                          actionSchemaName,
-                          systemContext,
-                      );
-                      displayStatus(
-                          `${prefix}Translating '${request}' into action '${value}'`,
-                          context,
-                      );
+                    //   const prefix = getSchemaNamePrefix(
+                    //       actionSchemaName,
+                    //       systemContext,
+                    //   );
+                    //   displayStatus(
+                    //       `${prefix}Translating '${request}' into action '${value}'`,
+                    //       context,
+                    //   );
                       const actionConfig =
                           systemContext.agents.getActionConfig(
                               actionSchemaName,
@@ -416,10 +416,10 @@ async function findAssistantForRequest(
     translatorName: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<NextTranslation | undefined> {
-    displayStatus(
-        `[↔️ (switcher)] Looking for another assistant to handle request '${request}'`,
-        context,
-    );
+    // displayStatus(
+    //     `[↔️ (switcher)] Looking for another assistant to handle request '${request}'`,
+    //     context,
+    // );
     const systemContext = context.sessionContext.agentContext;
     const schemaNames = systemContext.agents
         .getActiveSchemas()
