@@ -358,6 +358,27 @@ const systemHandlers: CommandHandlerTable = {
                 context.sessionContext.agentContext.clientIO.clear();
             },
         },
+        bootstrap: {
+            description: "Bootstrap the conversation with sample data",
+            async run(context: ActionContext<CommandHandlerContext>) {
+                //* TODO: Move the sample data into a separate JSON file
+                context.sessionContext.agentContext.conversationManager?.addMessageBatch([
+                    {
+                        text: "Celebrated New Years Day with our new neighbors",
+                        timestamp: new Date("2024-01-01 00:00"),
+                    },
+                    {
+                        text: "Alex lost a tooth, first one in a while!",
+                        timestamp: new Date("2025-03-05 13:54"),
+                    },
+                    {
+                        text: "I had a pretty bad headache tonight",
+                        timestamp: new Date("2025-02-10 18:01"),
+                    },
+                ])
+                //* TODO: Have it print a confirmation...?
+            },
+        },
         run: new RunCommandScriptHandler(),
         exit: {
             description: "Exit the program",
