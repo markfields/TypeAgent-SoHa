@@ -42,31 +42,33 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
         "Issues a random request from a dataset of pre-generated requests.";
 
     public async run(context: ActionContext<CommandHandlerContext>) {
-        displayStatus(`Selecting random request...`, context);
+        displayStatus(`Selecting random request... :)`, context);
 
         if (this.list == undefined || this.list.length == 0) {
             this.list = await this.getRequests();
         }
 
-        const randomRequest = this.list[randomInt(0, this.list.length)];
+        for (let i = 0; i < 2; i++) {
+            const randomRequest = `Ok, ${this.list[randomInt(0, this.list.length)]}`;
 
-        const systemContext = context.sessionContext.agentContext;
-        systemContext.clientIO.notify(
-            "randomCommandSelected",
-            systemContext.requestId,
-            {
-                message: randomRequest,
-            },
-            DispatcherName,
-        );
-        systemContext.clientIO.notify(
-            AppAgentEvent.Info,
-            systemContext.requestId,
-            randomRequest,
-            DispatcherName,
-        );
+            const systemContext = context.sessionContext.agentContext;
+            systemContext.clientIO.notify(
+                "randomCommandSelected",
+                systemContext.requestId,
+                {
+                    message: randomRequest,
+                },
+                DispatcherName,
+            );
+            systemContext.clientIO.notify(
+                AppAgentEvent.Info,
+                systemContext.requestId,
+                randomRequest,
+                DispatcherName,
+            );
 
-        await processCommandNoLock(randomRequest, systemContext);
+            await processCommandNoLock(randomRequest, systemContext);
+        }
     }
 
     public async getRequests(): Promise<string[]> {
