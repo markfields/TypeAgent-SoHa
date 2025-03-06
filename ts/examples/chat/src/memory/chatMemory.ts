@@ -417,15 +417,24 @@ export async function runChatMemory(): Promise<void> {
         const chatText = await readAllText(chatPath);
         // Split full transcript text into paragraphs
         const blocks = knowLib.conversation.splitTranscriptIntoBlocks(chatText);
+        const lengthMinutes = namedArgs.lengthMinutes ?? 60;
+        let lengthMs = lengthMinutes * 60 * 60;
+        const baseLineMs = lengthMs / blocks.length; // Average, these many minutes per block
+        const chatDate = new Date(2023, 4, 1, 9);
         if (!addToCurrent) {
             await context.conversation.messages.clear();
         }
-        for (let {text, time } of blocks) {
-            printer.writeTimestamp(time);
-            printer.writeLine(text.value);
+        for (let tBlock of timestampBlocks(
+            blocks,
+            chatDate,
+            baseLineMs,
+            baseLineMs + 2,
+        )) {
+            printer.writeTimestamp(tBlock.timestamp);
+            printer.writeLine(tBlock.value.value);
             await context.conversation.messages.put(
-                text,
-                time,
+                tBlock.value,
+                tBlock.timestamp,
             );
         }
     }

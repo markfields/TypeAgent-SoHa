@@ -191,8 +191,7 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
     }
     const lines = splitIntoLines(transcript, { trim: true, removeEmpty: true });
 
-    // e.g. USER 1 [2024-05-12 15:33]: hello world
-    const regex = /^(?<speaker>[A-Z0-9 ]+) \[(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2})\]:(?<speech>.*)$/;
+    const regex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const turns: TranscriptTurn[] = [];
     const participants = new Set<string>();
     let turn: TranscriptTurn | undefined;
@@ -201,8 +200,6 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
             let speech = match.groups["speech"];
-            let timestamp = match.groups["timestamp"];
-
             if (turn) {
                 if (speaker) {
                     turns.push(turn);
@@ -227,7 +224,6 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
                         value: speech,
                         type: TextBlockType.Paragraph,
                     },
-                    timestamp,
                 };
             }
         }
@@ -311,9 +307,9 @@ export function timestampTranscriptTurns(
  * @param transcript
  * @returns array of text blocks
  */
-export function splitTranscriptIntoBlocks(transcript: string): {text: TextBlock; time: Date}[] {
+export function splitTranscriptIntoBlocks(transcript: string): TextBlock[] {
     const turns = splitTranscriptIntoTurns(transcript);
-    return turns.map((t) => ({text: getMessageText(t, false), time: new Date(t.timestamp!)}));
+    return turns.map((t) => getMessageText(t, false));
 }
 
 export async function addTranscriptTurnsToConversation(
