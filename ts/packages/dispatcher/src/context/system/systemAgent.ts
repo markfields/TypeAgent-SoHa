@@ -361,22 +361,20 @@ const systemHandlers: CommandHandlerTable = {
         bootstrap: {
             description: "Bootstrap the conversation with sample data",
             async run(context: ActionContext<CommandHandlerContext>) {
-                //* TODO: Move the sample data into a separate JSON file
-                context.sessionContext.agentContext.conversationManager?.addMessageBatch([
-                    {
-                        text: "Celebrated New Years Day with our new neighbors",
-                        timestamp: new Date("2024-01-01 00:00"),
-                    },
-                    {
-                        text: "Alex lost a tooth, first one in a while!",
-                        timestamp: new Date("2025-03-05 13:54"),
-                    },
-                    {
-                        text: "I had a pretty bad headache tonight",
-                        timestamp: new Date("2025-02-10 18:01"),
-                    },
-                ])
-                //* TODO: Have it print a confirmation...?
+                const sampleDataPath = "/data/testChat/sampleData.json";
+                try {
+                    const data = await fs.promises.readFile(sampleDataPath, "utf-8");
+                    const messages = JSON.parse(data);
+
+                    context.sessionContext.agentContext.conversationManager?.addMessageBatch(
+                        messages.map((message: { text: string; timestamp: string }) => ({
+                            text: message.text,
+                            timestamp: new Date(message.timestamp),
+                        }))
+                    );
+                } catch (error) {
+                    displayError(`Error loading sample data: ${error}`, context);
+                }
             },
         },
         run: new RunCommandScriptHandler(),
