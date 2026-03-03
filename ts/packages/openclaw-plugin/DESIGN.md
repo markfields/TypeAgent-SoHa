@@ -57,62 +57,7 @@ const answer = await memory.getAnswerFromLanguage("summarize meetings about Y");
 
 ---
 
-## Integration Approaches Considered
-
-### Option A: OpenClaw Plugin (Recommended)
-
-Build an OpenClaw plugin that imports StructuredRAG's TypeScript packages directly.
-
-```
-User (chat/webhook)
-  → OpenClaw Agent
-    → moment_log tool   → ConversationMemory.addMessage() → StructuredRAG index
-    → moment_search tool → ConversationMemory.getAnswerFromLanguage() → answer
-```
-
-The plugin registers two tools the agent can call:
-- **`moment_log`** — Takes moment text + metadata, creates a `ConversationMessage`, calls `addMessage()` which triggers knowledge extraction + indexing
-- **`moment_search`** — Takes a natural language question, calls `searchWithLanguage()` / `getAnswerFromLanguage()`, returns structured results
-
-**Pros:** Single process, no network hops, simplest deployment, full access to StructuredRAG's typed APIs (entity/action/topic queries). Fits OpenClaw's plugin paradigm natively.
-
-**Cons:** Tightly coupled — StructuredRAG's dependencies (TypeChat, GPT-4o for extraction) run inside the OpenClaw process. Version coupling between OpenClaw and TypeAgent packages.
-
-### Option B: StructuredRAG Microservice + Thin Plugin
-
-Run StructuredRAG as a standalone HTTP service (small Express/Fastify wrapper). OpenClaw calls it via an HTTP-calling plugin or tool.
-
-```
-User (chat/webhook)
-  → OpenClaw Agent
-    → moment_log tool → HTTP POST /moments → StructuredRAG service → index
-    → moment_search tool → HTTP POST /search → StructuredRAG service → results
-```
-
-**Pros:** Loose coupling, independent deployment/scaling, StructuredRAG service reusable by other clients. Clean process boundary.
-
-**Cons:** More moving parts (two processes to run), HTTP serialization overhead, need to define an API contract.
-
-### Option C: Dual-Write (Both Memory Systems)
-
-Write Moments to both OpenClaw's native memory (for quick conversational recall) and StructuredRAG (for deep structured queries).
-
-```
-User → OpenClaw Agent
-  → moment_log tool
-      → append to memory/YYYY-MM-DD.md  (OpenClaw native, auto-indexed)
-      → ConversationMemory.addMessage()  (StructuredRAG index)
-  → memory_search (quick recall, built-in)
-  → structured_search (deep query, StructuredRAG)
-```
-
-**Pros:** Best of both — OpenClaw's temporal memory for "what happened today?" and StructuredRAG's knowledge graph for "what entities are related to X?". Graceful degradation.
-
-**Cons:** Dual writes, potential consistency issues, more complex agent instructions.
-
----
-
-## Recommendation: Option A (OpenClaw Plugin)
+## Chosen Approach: OpenClaw Plugin
 
 ### Why
 
@@ -258,6 +203,140 @@ The plugin would depend on:
 ### Open Questions
 
 1. **OpenClaw plugin SDK specifics** — Need to verify the exact plugin registration API (tool schema format, lifecycle hooks). The docs describe the concept but implementation details may require inspecting existing plugins.
-2. **LLM configuration** — StructuredRAG uses GPT-4o for knowledge extraction. Need to decide whether to share OpenClaw's LLM credentials or configure separately.
-3. **Storage location** — Where should the StructuredRAG index live? Options: inside OpenClaw's agent workspace (`~/.openclaw/agents/<id>/structuredrag/`) or a separate configurable path.
-4. **Concurrency** — If multiple Moments arrive simultaneously, `ConversationMemory` has `queueAddMessage()` for async background processing. Should the plugin use this or synchronous `addMessage()`?
+2. **Storage location** — Where should the StructuredRAG index live? Options: inside OpenClaw's agent workspace (`~/.openclaw/agents/<id>/structuredrag/`) or a separate configurable path.
+3. **Concurrency** — If multiple Moments arrive simultaneously, `ConversationMemory` has `queueAddMessage()` for async background processing. Should the plugin use this or synchronous `addMessage()`?
+
+---
+
+## Using Claude as the LLM
+
+StructuredRAG was built and tested against GPT-4o, but the architecture is largely model-agnostic. Here's what's involved in using a Claude API key instead.
+
+### Where StructuredRAG Uses an LLM
+
+There are **four** distinct LLM touch-points:
+
+| Purpose | What it does | Interface | Latency sensitivity |
+|---------|-------------|-----------|-------------------|
+| **Knowledge extraction** | Converts message text → `KnowledgeResponse` (entities, actions, topics) | TypeChat `JsonTranslator` | Low (background indexing) |
+| **Query translation** | Converts NL question → `SearchQuery` (structured filters) | TypeChat `JsonTranslator` | High (user-facing) |
+| **Answer generation** | Converts search results → NL answer | TypeChat `JsonTranslator` | High (user-facing) |
+| **Answer combining** | Merges chunked partial answers into one | Free-form `model.complete()` | Medium |
+
+All four accept an injected `TypeChatLanguageModel` — a trivial interface with one method:
+```typescript
+interface TypeChatLanguageModel {
+    complete(prompt: string | PromptSection[]): Promise<Result<string>>;
+}
+```
+
+The prompts are standard "translate this text to JSON matching this TypeScript schema" instructions. No OpenAI-specific features (function calling, structured outputs, tool_use) are used.
+
+### Where Embeddings Are Used
+
+In addition to chat LLM calls, StructuredRAG uses **text embeddings** for two secondary indexes:
+
+| Index | Purpose | Default |
+|-------|---------|---------|
+| **Related terms index** | Fuzzy term matching (e.g., "novel" ≈ "book") | OpenAI `text-embedding-ada-002` (1536 dims) |
+| **Message text index** | Semantic similarity re-ranking of messages | Same |
+
+Anthropic does not offer an embeddings API. Options:
+- **Keep OpenAI embeddings** — use Claude for chat, OpenAI just for embeddings (cheap, simple, proven)
+- **Switch to Voyage AI** — Anthropic's recommended embedding partner; implement `TextEmbeddingModel` adapter
+- **Skip secondary indexes** — set `relatedTermIndexSettings.embeddingModel = undefined` and rely on the primary inverted index only. This loses fuzzy matching but the core entity/action/topic search still works.
+
+**Recommendation:** Keep OpenAI embeddings for now. It's a few cents per million tokens and avoids any regression risk. Swap later if desired.
+
+### What Needs to Change in Code
+
+The `aiclient` package (`ts/packages/aiclient/`) speaks the OpenAI/Azure REST protocol exclusively. There are two paths to Claude:
+
+#### Path 1: Implement `createClaudeChatModel()` (Recommended)
+
+Write a small adapter (~80 lines) that implements `ChatModel` / `TypeChatLanguageModel` using the Anthropic Messages API:
+
+```typescript
+// Pseudocode
+function createClaudeChatModel(apiKey: string, model: string): ChatModel {
+    return {
+        complete(prompt) {
+            // Convert PromptSection[] → Anthropic messages format
+            // POST to https://api.anthropic.com/v1/messages
+            // Return result.content[0].text
+        }
+    };
+}
+```
+
+Key translation details:
+- `PromptSection[]` has `role: "system" | "user" | "assistant"` — maps directly to Anthropic's API
+- Strip `response_format: { type: "json_object" }` — not needed because TypeChat's prompt already instructs JSON output
+- Strip `seed` parameter (OpenAI-specific, used for determinism in tests)
+- `temperature` maps directly
+
+Then inject this model into the three creation points:
+- `ConversationMemory` constructor (for knowledge extraction)
+- `SearchQueryTranslator` constructor (for query translation)
+- `AnswerGeneratorSettings` (for answer generation + combining)
+
+All three already accept an optional model parameter — no changes to StructuredRAG internals needed.
+
+#### Path 2: OpenAI-Compatible Proxy (LiteLLM, etc.)
+
+Run a proxy that translates OpenAI API calls to Anthropic calls. Point `OPENAI_ENDPOINT` at it. Zero code changes but adds a deployment dependency.
+
+**Recommendation:** Path 1. It's a small, self-contained adapter with no external dependencies.
+
+### Risks and Mitigations
+
+#### Risk 1: Knowledge Extraction Quality
+
+The knowledge extraction schema (`KnowledgeResponse`) is a deeply nested TypeScript type with `ConcreteEntity`, `Action`, `Facet`, `VerbTense`, etc. The LLM must produce valid JSON matching this schema precisely.
+
+**Mitigation:**
+- Claude is strong at structured JSON output. TypeChat's repair loop (sends JSON validation errors back to the model for correction) provides a safety net.
+- The knowPro README notes: *"KnowPro has been primarily tested with GPT-4o. Results with other models are not guaranteed."* Start by running the existing test suite (`pnpm --filter knowpro test`) with Claude and comparing extraction quality.
+- Consider running a small A/B: extract knowledge from 20-30 sample Moments with both GPT-4o and Claude, diff the results.
+
+#### Risk 2: Query Translation Accuracy
+
+The `SearchQuery` schema requires the LLM to decompose a natural language question into `ActionTerm` (verbs, actors, targets), `EntityTerm` (name, type, facets), and `DateTimeRange` filters. Subtle differences in how Claude interprets the schema could affect search recall.
+
+**Mitigation:**
+- TypeChat's schema-as-prompt approach is model-agnostic by design — the TypeScript types *are* the instructions.
+- The query translation tests in knowPro provide a regression baseline.
+
+#### Risk 3: JSON Format Compliance
+
+The `createJsonChatModel()` function sets `response_format: { type: "json_object" }`, an OpenAI-specific parameter that guarantees valid JSON output. Claude doesn't have this exact feature.
+
+**Mitigation:**
+- TypeChat already includes JSON instructions in the prompt text itself ("respond with JSON matching this schema").
+- TypeChat's repair loop catches and fixes malformed JSON (up to `retryMaxAttempts` retries).
+- Claude's JSON compliance rate from prompt instructions alone is very high in practice. The `response_format` parameter is a belt-and-suspenders safeguard, not a hard requirement.
+
+#### Risk 4: Cost Differences
+
+Claude and GPT-4o have different pricing. Knowledge extraction runs on every `addMessage()` call.
+
+**Mitigation:**
+- Use Claude Haiku for knowledge extraction (background, latency-insensitive) and Claude Sonnet for query translation / answer generation (user-facing, quality-sensitive).
+- The `ConversationSettings.semanticRefIndexSettings.batchSize` controls how many messages are batched per extraction call — tune this to manage cost.
+
+---
+
+## Alternatives Considered
+
+- **StructuredRAG Microservice + Thin Plugin** — Run StructuredRAG as a separate HTTP service; OpenClaw calls it via plugin. Better separation of concerns but adds deployment complexity. Can evolve to this later if needed.
+- **Dual-Write (Both Memory Systems)** — Write Moments to both OpenClaw's native memory and StructuredRAG. Gets benefits of both but adds consistency complexity. Worth revisiting once the core integration is proven.
+
+---
+
+## Future Ideas
+
+- **Webhook endpoint for external Moments** — Expose a dedicated `POST /hooks/moment` webhook so external systems (scripts, IoT, other apps) can log Moments without going through the chat agent. The hook would call `moment_log` directly, bypassing the LLM agent turn for lower latency and cost.
+- **Moment aggregation reports** — Scheduled agent turns (via OpenClaw heartbeat hooks) that aggregate recent Moments into daily/weekly summaries, stored as their own Moments for hierarchical recall.
+- **Structured Moment types** — Define typed Moment schemas (meeting, observation, decision, idea) with type-specific fields, enabling richer knowledge extraction and faceted search.
+- **Dual-write to OpenClaw native memory** — Once the core plugin is stable, optionally also write Moments to OpenClaw's `memory/YYYY-MM-DD.md` files so the agent can recall them even without the StructuredRAG tool.
+- **Multi-agent Moment sharing** — Use OpenClaw's multi-agent routing to let different agents (work, personal, project-specific) share a single StructuredRAG index or maintain isolated indexes.
