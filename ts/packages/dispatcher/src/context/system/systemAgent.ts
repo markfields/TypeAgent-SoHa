@@ -366,12 +366,19 @@ const systemHandlers: CommandHandlerTable = {
                     const data = await fs.promises.readFile(sampleDataPath, "utf-8");
                     const messages = JSON.parse(data);
 
-                    context.sessionContext.agentContext.conversationManager?.addMessageBatch(
-                        messages.map((message: { text: string; timestamp: string }) => ({
-                            text: message.text,
-                            timestamp: new Date(message.timestamp),
-                        }))
+                    console.log("Starting to load");
+
+                    await context.sessionContext.agentContext.conversationManager?.addMessageBatch(
+                        messages.map((message: { text: string; timestamp: string }) => {
+                            console.log(`LOADING: ${message.text.substring(0, 20)}...`);
+
+                            return ({
+                                text: message.text,
+                                timestamp: new Date(message.timestamp),
+                            });
+                        }),
                     );
+                    console.log("Finished loading");
                 } catch (error) {
                     displayError(`Error loading sample data: ${error}`, context);
                 }

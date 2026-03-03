@@ -29,13 +29,24 @@ async function createLocalWhisperHost(): Promise<ChildProcessWithoutNullStreams>
 
     const serviceRoot = localWhisperPythonScriptPath;
     debug(`Starting local whisper service at ${serviceRoot}`);
-    const childProcess = spawn("python", [serviceRoot]);
+    const childProcess = spawn("py", [serviceRoot]);
+
+    // Add logging
+    childProcess.stdout.on("data", (data) => {
+        console.log(`STDOUT: ${data}`);
+    });
+    childProcess.stderr.on("data", (data) => {
+        console.error(`STDERR: ${data}`);
+    });
+    childProcess.on("close", (code) => {
+        console.error(`Process exited with code ${code}`);
+    });
 
     const timeoutPromise = new Promise<ChildProcessWithoutNullStreams>(
         (_resolve, reject) => {
             timeoutHandle = setTimeout(
                 () => reject(new Error("Timeout")),
-                10000,
+                100000,
             );
         },
     );
